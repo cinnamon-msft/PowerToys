@@ -1,22 +1,51 @@
-name: Manual Batch Issue Deduplication
+name: Manual Multi-Issue Deduplication
 
 on:
-  workflow_dispatch: # Only runs when manually triggered
-  
-  issues:
-    types: [opened, edited]
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "ISO date for earliest issue (e.g. 2023-01-01T00:00:00Z)"
+        required: false
+        default: '2019-05-05T00:00:00Z'
+      max_issues:
+        description: "Maximum number of issues to process"
+        required: false
+        default: 20
 
 jobs:
-  batch-deduplicate:
+  fetch-issues:
     runs-on: ubuntu-latest
+    outputs:
+      issue_numbers: ${{ steps.issues.outputs.issue_numbers }}
     steps:
-      - name: Batch Deduplicate Issues
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Fetch Issues
+        id: issues
+        run: |
+          gh auth login --with-token < <(echo "${{ secrets.GITHUB_TOKEN }}")
+          SINCE="${{ github.event.inputs.since }}"
+          MAX="${{ github.event.inputs.max_issues }}"
+          # Fetch open issues since the date, limited to MAX
+          ISSUES=$(gh issue list --state open --limit "$MAX" --search "created:>=$SINCE" --json number --jq '.[].number')
+          echo "Fetched issues: $ISSUES"
+          # Format as a comma separated list for matrix
+          ISSUE_NUMBERS=$(echo $ISSUES | tr ' ' ',')
+          echo "issue_numbers=$ISSUE_NUMBERS" >> $GITHUB_OUTPUT
+
+  deduplicate:
+    needs: fetch-issues
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        issue_number: [${{ needs.fetch-issues.outputs.issue_numbers }}]
+    steps:
+      - name: Deduplicate Issue
         uses: pelikhan/action-genai-issue-dedup@v0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          github_issue: ${{ matrix.issue_number }}
           label-duplicate: "potential duplicate"
           comment-duplicate: true
           close-duplicate: false
-          batch-size: 100 
           duplicate-comment-template: "This issue appears to be a duplicate of #{duplicate_issue_number}."
-          # Add other action-specific inputs if needed
