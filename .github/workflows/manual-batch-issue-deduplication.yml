@@ -23,22 +23,18 @@ jobs:
       - name: Fetch Issues
         id: issues
         run: |
-          gh auth login --with-token < <(echo "${{ secrets.GITHUB_TOKEN }}")
           SINCE="${{ github.event.inputs.since }}"
           MAX="${{ github.event.inputs.max_issues }}"
-          # Fetch open issues since the date, limited to MAX
           ISSUES=$(gh issue list --state open --limit "$MAX" --search "created:>=$SINCE" --json number --jq '.[].number')
-          echo "Fetched issues: $ISSUES"
-          # Format as a comma separated list for matrix
-          ISSUE_NUMBERS=$(echo $ISSUES | tr ' ' ',')
-          echo "issue_numbers=$ISSUE_NUMBERS" >> $GITHUB_OUTPUT
+          # Output as JSON array for matrix
+          echo "issue_numbers=$(echo $ISSUES | jq -c '.')" >> $GITHUB_OUTPUT
 
   deduplicate:
     needs: fetch-issues
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        issue_number: [${{ needs.fetch-issues.outputs.issue_numbers }}]
+        issue_number: ${{ fromJson(needs.fetch-issues.outputs.issue_numbers) }}
     steps:
       - name: Deduplicate Issue
         uses: pelikhan/action-genai-issue-dedup@v0
