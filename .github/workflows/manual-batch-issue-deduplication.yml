@@ -2,6 +2,9 @@ name: Manual Batch Issue Deduplication
 
 on:
   workflow_dispatch: # Only runs when manually triggered
+  
+  issues:
+    types: [opened, edited]
 
 jobs:
   batch-deduplicate:
@@ -11,6 +14,7 @@ jobs:
         uses: pelikhan/action-genai-issue-dedup@v0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          github_issue: ${{ github.event.inputs.issue_number || github.event.issue.number }}
           label-duplicate: "potential duplicate"
           comment-duplicate: true
           close-duplicate: false
