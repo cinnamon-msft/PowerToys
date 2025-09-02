@@ -13,6 +13,20 @@ using Moq;
 
 namespace Hosts.Tests
 {
+    /// <summary>
+    /// Comprehensive test suite for the DuplicateService functionality in PowerToys Hosts module.
+    /// 
+    /// This test class creates and validates 30 host entries with strategically placed duplicates
+    /// to test various aspects of duplicate detection including:
+    /// - Exact duplicates (same IP + same hostnames)
+    /// - Address duplicates (same IP + different hostnames)  
+    /// - Host overlaps (different IPs + shared hostnames)
+    /// - Case insensitive comparisons
+    /// - IPv4, IPv6, and loopback address handling
+    /// - Multi-host entry scenarios
+    /// 
+    /// The test data serves as both validation and documentation for duplicate detection behavior.
+    /// </summary>
     [TestClass]
     public class DuplicateServiceTest
     {
@@ -28,7 +42,22 @@ namespace Hosts.Tests
         }
 
         /// <summary>
-        /// Creates 30 test entries where some are intentional duplicates to test duplicate detection functionality
+        /// Creates 30 test entries where some are intentional duplicates to test duplicate detection functionality.
+        /// 
+        /// Duplicate Groups Created:
+        /// - Entries 1,2,3: Exact duplicates (192.168.1.100 example.com)
+        /// - Entries 11,12: IPv6 duplicates (2001:db8::1 ipv6test.com)
+        /// - Entries 13,14: Loopback duplicates (127.0.0.1 localhost)
+        /// - Entries 21,22: Case insensitive duplicates (CaseSensitive.com vs casesensitive.com)
+        /// - Entries 26,27: Internal network duplicates (10.0.0.1 internal.com)
+        /// - Entries 29,30: Private network duplicates (172.16.0.1 private.com)
+        /// 
+        /// Additional Test Scenarios:
+        /// - Entries 4,5,6: Same address, different hosts (192.168.1.101)
+        /// - Entries 7,8: Different addresses, same host (shared.com)
+        /// - Entries 9,10: Multi-host overlap (multi2.com appears in both)
+        /// - Entries 16-20: Unique entries (control group)
+        /// - Entries 23,24: Complex multi-host overlap scenarios
         /// </summary>
         private List<Entry> CreateTestEntries()
         {
