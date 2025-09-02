@@ -28,8 +28,14 @@ jobs:
           SINCE="${{ github.event.inputs.since }}"
           MAX="${{ github.event.inputs.max_issues }}"
           ISSUES=$(gh issue list --state open --limit "$MAX" --search "created:>=$SINCE" --json number --jq '.[].number')
-          # Output as JSON array for matrix
-          echo "issue_numbers=$(echo $ISSUES | jq -c '.')" >> $GITHUB_OUTPUT
+          # Always output as JSON array, even if empty or single value
+          if [ -z "$ISSUES" ]; then
+            echo 'issue_numbers=[]' >> $GITHUB_OUTPUT
+          else
+            # Ensure the output is an array (handles single value case)
+            ISSUES_JSON=$(echo "$ISSUES" | jq -c '.')
+            echo "issue_numbers=$ISSUES_JSON" >> $GITHUB_OUTPUT
+          fi
 
   deduplicate:
     needs: fetch-issues
