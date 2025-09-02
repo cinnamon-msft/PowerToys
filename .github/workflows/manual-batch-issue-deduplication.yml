@@ -14,11 +14,11 @@ jobs:
         uses: pelikhan/action-genai-issue-dedup@v0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          github_issue: ${{ github.event.inputs.issue_number || github.event.issue.number }}
+          # github_issue: ${{ github.event.inputs.issue_number || github.event.issue.number }}
           label-duplicate: "potential duplicate"
           comment-duplicate: true
           close-duplicate: false
           batch-size: 100 
-          since: '2019-05-05T00:00:00Z' # Process issues dating back to 2019
+          # since: '2019-05-05T00:00:00Z' # Process issues dating back to 2019
           duplicate-comment-template: "This issue appears to be a duplicate of #{duplicate_issue_number}."
           # Add other action-specific inputs if needed
