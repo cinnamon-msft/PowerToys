@@ -1,55 +1,62 @@
-name: Manual Multi-Issue Deduplication
+name: Batch Issue Deduplication
 
 on:
   workflow_dispatch:
     inputs:
+      count:
+        description: "Number of issues to check (default: 30)"
+        required: false
+        default: "30"
       since:
-        description: "ISO date for earliest issue (e.g. 2023-01-01T00:00:00Z)"
+        description: "Only check issues created after this date (ISO 8601 format, e.g. 2023-01-01T00:00:00Z)"
         required: false
-        default: '2019-05-05T00:00:00Z'
-      max_issues:
-        description: "Maximum number of issues to process"
+        default: ""
+      state:
+        description: "State of issues to check: open, closed, all"
         required: false
-        default: 20
+        default: "open"
+      labels:
+        description: "Labels to filter issues by (comma separated), or 'auto'"
+        required: false
+        default: ""
+      max_duplicates:
+        description: "Maximum number of duplicates to check for"
+        required: false
+        default: "3"
+      tokens_per_issue:
+        description: "Number of tokens to use for each issue when checking for duplicates"
+        required: false
+        default: "1000"
+      confirm_duplicates:
+        description: "Confirm duplicates with a large model before labeling (true/false)"
+        required: false
+        default: "true"
+      label_as_duplicate:
+        description: "Apply duplicate label if duplicates are found (true/false)"
+        required: false
+        default: "true"
+      debug:
+        description: "Enable debug logging"
+        required: false
+        default: "false"
 
 jobs:
-  fetch-issues:
+  deduplicate:
     runs-on: ubuntu-latest
-    outputs:
-      issue_numbers: ${{ steps.issues.outputs.issue_numbers }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Fetch Issues
-        id: issues
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          SINCE="${{ github.event.inputs.since }}"
-          MAX="${{ github.event.inputs.max_issues }}"
-          ISSUES=$(gh issue list --state open --limit "$MAX" --search "created:>=$SINCE" --json number --jq '.[].number')
-          # Always output as JSON array, even if empty or single value
-          if [ -z "$ISSUES" ]; then
-            echo 'issue_numbers=[]' >> $GITHUB_OUTPUT
-          else
-            # Ensure the output is an array (handles single value case)
-            ISSUES_JSON=$(echo "$ISSUES" | jq -c '.')
-            echo "issue_numbers=$ISSUES_JSON" >> $GITHUB_OUTPUT
-          fi
 
-  deduplicate:
-    needs: fetch-issues
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        issue_number: ${{ fromJson(needs.fetch-issues.outputs.issue_numbers) }}
-    steps:
-      - name: Deduplicate Issue
-        uses: pelikhan/action-genai-issue-dedup@v0
+      - name: Run GenAI Issue Deduplicator Batch
+        uses: pelikhan/action-genai-issue-dedup@v0.0.19
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          github_issue: ${{ matrix.issue_number }}
-          label-duplicate: "potential duplicate"
-          comment-duplicate: true
-          close-duplicate: false
-          duplicate-comment-template: "This issue appears to be a duplicate of #{duplicate_issue_number}."
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          count: ${{ github.event.inputs.count }}
+          since: ${{ github.event.inputs.since }}
+          state: ${{ github.event.inputs.state }}
+          labels: ${{ github.event.inputs.labels }}
+          max_duplicates: ${{ github.event.inputs.max_duplicates }}
+          tokens_per_issue: ${{ github.event.inputs.tokens_per_issue }}
+          confirm_duplicates: ${{ github.event.inputs.confirm_duplicates }}
+          label_as_duplicate: ${{ github.event.inputs.label_as_duplicate }}
+          debug: ${{ github.event.inputs.debug }}
