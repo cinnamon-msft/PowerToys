@@ -6,6 +6,10 @@ on:
       issue_numbers:
         description: "JSON array of issue numbers to deduplicate (e.g. [101,102,103])"
         required: true
+      since:
+        description: "Only compare against issues created after this date (ISO 8601, e.g. 2019-05-05T00:00:00Z)"
+        required: false
+        default: "2019-05-05T00:00:00Z"
       label_as_duplicate:
         description: "Apply duplicate label if duplicates are found (true/false)"
         required: false
@@ -30,9 +34,9 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Run GenAI Issue Deduplicator
-        uses: pelikhan/action-genai-issue-dedup@v0.0.19
+        uses: pelikhan/action-genai-issue-dedup@v0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           github_issue: ${{ matrix.issue }}
-          label-duplicate: "potential duplicate"
+          label_as_duplicate: ${{ github.event.inputs.label_as_duplicate }}
           debug: ${{ github.event.inputs.debug }}
