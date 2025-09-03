@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       issue_numbers:
-        description: "Comma-separated list of issue numbers to deduplicate"
+        description: "JSON array of issue numbers to deduplicate (e.g. [101,102,103])"
         required: true
       label_as_duplicate:
         description: "Apply duplicate label if duplicates are found (true/false)"
@@ -24,13 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        issue: ${{ fromJson('[' + replace(github.event.inputs.issue_numbers, ',', ',') + ']') }}
+        issue: ${{ fromJson(github.event.inputs.issue_numbers) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
       - name: Run GenAI Issue Deduplicator
-        uses: pelikhan/action-genai-issue-dedup@v0
+        uses: pelikhan/action-genai-issue-dedup@v0.0.19
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           github_issue: ${{ matrix.issue }}
