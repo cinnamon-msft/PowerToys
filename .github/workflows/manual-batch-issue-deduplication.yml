@@ -3,34 +3,9 @@ name: Batch Issue Deduplication
 on:
   workflow_dispatch:
     inputs:
-      count:
-        description: "Number of issues to check (default: 30)"
-        required: false
-        default: "30"
-      since:
-        description: "Only check issues created after this date (ISO 8601 format, e.g. 2023-01-01T00:00:00Z)"
-        required: false
-        default: ""
-      state:
-        description: "State of issues to check: open, closed, all"
-        required: false
-        default: "open"
-      labels:
-        description: "Labels to filter issues by (comma separated), or 'auto'"
-        required: false
-        default: ""
-      max_duplicates:
-        description: "Maximum number of duplicates to check for"
-        required: false
-        default: "3"
-      tokens_per_issue:
-        description: "Number of tokens to use for each issue when checking for duplicates"
-        required: false
-        default: "1000"
-      confirm_duplicates:
-        description: "Confirm duplicates with a large model before labeling (true/false)"
-        required: false
-        default: "true"
+      issue_numbers:
+        description: "Comma-separated list of issue numbers to deduplicate"
+        required: true
       label_as_duplicate:
         description: "Apply duplicate label if duplicates are found (true/false)"
         required: false
@@ -40,23 +15,24 @@ on:
         required: false
         default: "false"
 
+permissions:
+  models: read
+  issues: write
+
 jobs:
   deduplicate:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        issue: ${{ fromJson('[' + replace(github.event.inputs.issue_numbers, ',', ',') + ']') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Run GenAI Issue Deduplicator Batch
-        uses: pelikhan/action-genai-issue-dedup@v0.0.19
+      - name: Run GenAI Issue Deduplicator
+        uses: pelikhan/action-genai-issue-dedup@v0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          count: ${{ github.event.inputs.count }}
-          since: ${{ github.event.inputs.since }}
-          state: ${{ github.event.inputs.state }}
-          labels: ${{ github.event.inputs.labels }}
-          max_duplicates: ${{ github.event.inputs.max_duplicates }}
-          tokens_per_issue: ${{ github.event.inputs.tokens_per_issue }}
-          confirm_duplicates: ${{ github.event.inputs.confirm_duplicates }}
+          github_issue: ${{ matrix.issue }}
           label_as_duplicate: ${{ github.event.inputs.label_as_duplicate }}
           debug: ${{ github.event.inputs.debug }}
