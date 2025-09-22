@@ -16,3 +16,4 @@ jobs:
         uses: pelikhan/action-genai-issue-dedup@v0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          label_as_duplicate: ${{ github.event.inputs.label_as_duplicate }}
