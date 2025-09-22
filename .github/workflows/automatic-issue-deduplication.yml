@@ -1,4 +1,4 @@
-name: Label Duplicate Issues when Filed
+name: Automatic New Issue Deduplication
 on:
   issues:
     types: [opened, reopened]
