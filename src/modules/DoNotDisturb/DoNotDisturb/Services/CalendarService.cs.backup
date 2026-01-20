@@ -1,0 +1,351 @@
+// Copyright (c) Microsoft Corporation
+// The Microsoft Corporation licenses this file to you under the MIT license.
+// See the LICENSE file in the project root for more information.
+
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using ManagedCommon;
+
+namespace DoNotDisturb.Services
+{
+    /// <summary>
+    /// Service for querying calendar information via GitHub Copilot CLI and WorkIQ MCP server.
+    /// </summary>
+    public class CalendarService : IDisposable
+    {
+        private readonly SemaphoreSlim _queryLock = new(1, 1);
+        private string? _ghCliPath;
+        private bool _disposed;
+        private bool _isInitialized;
+        private MeetingInfo? _cachedMeetingInfo;
+        private DateTime _cacheExpiry = DateTime.MinValue;
+        private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(2);
+
+        /// <summary>
+        /// Initializes the calendar service by locating the GitHub CLI.
+        /// </summary>
+        /// <returns>True if initialization succeeded, false otherwise.</returns>
+        public Task<bool> InitializeAsync()
+        {
+            if (_isInitialized)
+            {
+                return Task.FromResult(true);
+            }
+
+            try
+            {
+                Logger.LogInfo("Initializing CalendarService...");
+
+                // Find GitHub CLI (gh) which has copilot extension
+                _ghCliPath = FindGitHubCli();
+
+                if (string.IsNullOrEmpty(_ghCliPath))
+                {
+                    Logger.LogWarning("GitHub CLI (gh) not found in PATH. Calendar integration unavailable.");
+                }
+                else
+                {
+                    Logger.LogInfo($"Found GitHub CLI at: {_ghCliPath}");
+                }
+
+                _isInitialized = true;
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to initialize CalendarService: {ex.Message}");
+                return Task.FromResult(false);
+            }
+        }
+
+        /// <summary>
+        /// Finds the GitHub CLI executable in the system PATH.
+        /// </summary>
+        private static string? FindGitHubCli()
+        {
+            var pathEnv = Environment.GetEnvironmentVariable("PATH");
+            if (string.IsNullOrEmpty(pathEnv))
+            {
+                return null;
+            }
+
+            var paths = pathEnv.Split(Path.PathSeparator);
+            var cliNames = new[] { "gh.exe", "gh" };
+
+            foreach (var path in paths)
+            {
+                foreach (var cliName in cliNames)
+                {
+                    var fullPath = Path.Combine(path.Trim(), cliName);
+                    if (File.Exists(fullPath))
+                    {
+                        return fullPath;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+            foreach (var path in paths)
+            {
+                foreach (var cliName in cliNames)
+                {
+                    var fullPath = Path.Combine(path, cliName);
+                    if (File.Exists(fullPath))
+                    {
+                        return fullPath;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the next meeting from the user's calendar via WorkIQ.
+        /// </summary>
+        /// <returns>Meeting information, or null if an error occurred.</returns>
+        public async Task<MeetingInfo?> GetNextMeetingAsync()
+        {
+            if (!_isInitialized)
+            {
+                var initialized = await InitializeAsync();
+                if (!initialized)
+                {
+                    Logger.LogError("Cannot get next meeting - CalendarService not initialized.");
+                    return null;
+                }
+            }
+
+            await _queryLock.WaitAsync();
+            try
+            {
+                Logger.LogInfo("Querying WorkIQ for next meeting...");
+
+                // If Copilot CLI is available, try to use it
+                if (!string.IsNullOrEmpty(_copilotCliPath))
+                {
+                    return await QueryViaCopilotCliAsync();
+                }
+
+                // Fallback: Return mock data indicating no meetings
+                // This allows the module to function even without Copilot CLI
+                Logger.LogInfo("Using mock calendar data (Copilot CLI not available).");
+                return new MeetingInfo
+                {
+                    HasMeeting = false,
+                    Title = string.Empty,
+                    StartTime = default,
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to query calendar: {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                _queryLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Queries the calendar via Copilot CLI.
+        /// </summary>
+        private async Task<MeetingInfo> QueryViaCopilotCliAsync()
+        {
+            try
+            {
+                // Note: This is a placeholder implementation.
+                // The actual implementation would need to:
+                // 1. Start a Copilot CLI session
+                // 2. Send a query to WorkIQ via the MCP server
+                // 3. Parse the response
+                //
+                // For now, we'll simulate this with a process call
+                // that would need to be adapted based on actual Copilot CLI interface.
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = _copilotCliPath,
+                    Arguments = "--help", // Placeholder - would be actual query command
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+
+                using var process = new Process { StartInfo = startInfo };
+                var output = new StringBuilder();
+                var error = new StringBuilder();
+
+                process.OutputDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                    {
+                        output.AppendLine(e.Data);
+                    }
+                };
+
+                process.ErrorDataReceived += (s, e) =>
+                {
+                    if (e.Data != null)
+                    {
+                        error.AppendLine(e.Data);
+                    }
+                };
+
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                await process.WaitForExitAsync();
+
+                if (process.ExitCode != 0)
+                {
+                    Logger.LogWarning($"Copilot CLI returned non-zero exit code: {process.ExitCode}");
+                    Logger.LogWarning($"Error output: {error}");
+                }
+
+                // Parse the response
+                return ParseMeetingResponse(output.ToString());
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Failed to query via Copilot CLI: {ex.Message}");
+                return new MeetingInfo { HasMeeting = false };
+            }
+        }
+
+        /// <summary>
+        /// Parses the response from WorkIQ to extract meeting information.
+        /// </summary>
+        private static MeetingInfo ParseMeetingResponse(string response)
+        {
+            var meetingInfo = new MeetingInfo();
+
+            if (string.IsNullOrWhiteSpace(response))
+            {
+                Logger.LogWarning("Empty response from WorkIQ.");
+                return meetingInfo;
+            }
+
+            // Check for no meetings
+            if (response.Contains("no meeting", StringComparison.OrdinalIgnoreCase) ||
+                response.Contains("no upcoming", StringComparison.OrdinalIgnoreCase) ||
+                response.Contains("no scheduled", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.LogInfo("No upcoming meetings found.");
+                meetingInfo.HasMeeting = false;
+                return meetingInfo;
+            }
+
+            // Try to parse meeting time from response
+            try
+            {
+                var lines = response.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    // Try to find a datetime in the response
+                    if (TryExtractDateTime(line, out var dateTime))
+                    {
+                        meetingInfo.StartTime = dateTime;
+                        meetingInfo.HasMeeting = true;
+                    }
+
+                    // Extract title (look for quoted strings or "Meeting:" patterns)
+                    if (line.Contains("Meeting:", StringComparison.OrdinalIgnoreCase) ||
+                        line.Contains("Title:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var colonIndex = line.IndexOf(':');
+                        if (colonIndex >= 0 && colonIndex < line.Length - 1)
+                        {
+                            meetingInfo.Title = line[(colonIndex + 1)..].Trim().Trim('"');
+                        }
+                    }
+                }
+
+                if (meetingInfo.HasMeeting)
+                {
+                    Logger.LogInfo($"Found meeting: {meetingInfo.Title} at {meetingInfo.StartTime}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning($"Failed to parse meeting response: {ex.Message}");
+            }
+
+            return meetingInfo;
+        }
+
+        /// <summary>
+        /// Attempts to extract a DateTime from a string.
+        /// </summary>
+        private static bool TryExtractDateTime(string text, out DateTimeOffset dateTime)
+        {
+            dateTime = default;
+
+            // Try ISO 8601 format first
+            if (DateTimeOffset.TryParse(text, out dateTime))
+            {
+                return true;
+            }
+
+            // Look for common patterns like "2:30 PM", "14:30", etc.
+            var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var word in words)
+            {
+                if (DateTimeOffset.TryParse(word, out dateTime))
+                {
+                    // If only time was parsed, assume today's date
+                    if (dateTime.Date == DateTimeOffset.MinValue.Date)
+                    {
+                        dateTime = new DateTimeOffset(
+                            DateTimeOffset.Now.Year,
+                            DateTimeOffset.Now.Month,
+                            DateTimeOffset.Now.Day,
+                            dateTime.Hour,
+                            dateTime.Minute,
+                            dateTime.Second,
+                            dateTime.Offset);
+                    }
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Disposes resources.
+        /// </summary>
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        /// <summary>
+        /// Disposes resources.
+        /// </summary>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    _queryLock.Dispose();
+                }
+
+                _disposed = true;
+            }
+        }
+    }
+}

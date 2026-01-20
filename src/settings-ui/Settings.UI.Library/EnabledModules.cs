@@ -529,6 +529,23 @@ namespace Microsoft.PowerToys.Settings.UI.Library
             }
         }
 
+        private bool doNotDisturb; // defaulting to off
+
+        [JsonPropertyName("DoNotDisturb")]
+        public bool DoNotDisturb
+        {
+            get => doNotDisturb;
+            set
+            {
+                if (doNotDisturb != value)
+                {
+                    LogTelemetryEvent(value);
+                    doNotDisturb = value;
+                    NotifyChange();
+                }
+            }
+        }
+
         private bool lightSwitch;
 
         [JsonPropertyName("LightSwitch")]

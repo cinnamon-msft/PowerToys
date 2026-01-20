@@ -13,6 +13,7 @@ namespace ManagedCommon
         CmdPal,
         CropAndLock,
         CursorWrap,
+        DoNotDisturb,
         EnvironmentVariables,
         FancyZones,
         FileLocksmith,
